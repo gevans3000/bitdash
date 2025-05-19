@@ -1,0 +1,81 @@
+# Supabase MCP Server - Task List
+
+## Completed Tasks
+- [x] Create initial project structure (2025-03-29)
+- [x] Implement MCP server with Stdio transport (2025-04-04)
+- [x] Implement Supabase client integration (2025-04-04)
+- [x] Create tool for reading records from tables (2025-04-04)
+- [x] Create tool for creating records in tables (2025-04-04)
+- [x] Create tool for updating records in tables (2025-04-04)
+- [x] Create tool for deleting records from tables (2025-04-04)
+- [x] Update README.md with setup and usage instructions (2025-04-04)
+- [x] Implement error handling for database operations (2025-04-04)
+- [x] Add support for pagination in read operations (2025-04-04)
+- [x] Add support for filtering in read operations (2025-04-04)
+- [x] Add support for sorting in read operations (2025-04-04)
+- [x] Add unit tests for all tools (2025-04-04)
+  - [x] Test Supabase client wrapper
+  - [x] Test MCP server implementation
+  - [x] Test request model validation
+  - [x] Test error handling
+- [x] Improve server error handling and logging (2025-04-05)
+  - [x] Add detailed logging with timestamps
+  - [x] Implement connection testing with multiple fallback tables
+  - [x] Add better error reporting and diagnostics
+  - [x] Create comprehensive connection test script
+- [x] Add support for MCP integration with Windsurf/Cursor (2025-04-05)
+  - [x] Create mcp_config.json for Windsurf/Cursor integration
+  - [x] Test with local Supabase instance
+  - [x] Document configuration in README
+- [x] Fix update_records and delete_records methods (2025-04-05)
+  - [x] Implement direct client approach for update operations
+  - [x] Implement direct client approach for delete operations
+  - [x] Test all CRUD operations with verbose logging
+- [x] Create test scripts for database and server verification (2025-04-05)
+  - [x] Create test_supabase_connection.py for database testing
+  - [x] Create test_server.py for component testing
+  - [x] Create test_server_initialization.py for server initialization testing
+
+## Upcoming Tasks
+- [ ] Implement enhanced logging (2025-04-05)
+  - [ ] Add structured logging with levels
+  - [ ] Log all database operations
+  - [ ] Add request/response logging
+  - [ ] Configure log output format
+- [ ] Add support for joins in read operations (2025-04-05)
+  - [ ] Implement foreign table references
+  - [ ] Support nested data in responses
+- [ ] Implement schema validation for input data (2025-04-05)
+  - [ ] Add table schema detection
+  - [ ] Validate input data against table schema
+  - [ ] Add type conversion for common data types
+
+## Discovered During Work
+- [ ] Add a tool for executing raw SQL queries
+  - [ ] Implement secure parameterized queries
+  - [ ] Add query result formatting
+- [ ] Add a tool for listing available tables
+  - [ ] Query Supabase system tables
+  - [ ] Filter by schema
+- [ ] Add a tool for reading table schemas
+  - [ ] Show column names, types, and constraints
+  - [ ] Support for viewing indexes and foreign keys
+- [ ] Add support for Supabase Storage integration
+  - [ ] Upload files
+  - [ ] Download files
+  - [ ] List files in buckets
+- [ ] Add support for Edge Functions management
+  - [ ] List functions
+  - [ ] Invoke functions
+  - [ ] Deploy functions
+- [ ] Implement connection pooling for better performance
+  - [ ] Configure pool size
+  - [ ] Add connection timeout handling
+- [ ] Add support for different Supabase schemas (2025-04-05)
+  - [ ] Improve table detection across schemas
+  - [ ] Add schema-aware operations
+  - [ ] Support for custom schemas
+- [ ] Improve error handling in SupabaseClient class (2025-04-05)
+  - [ ] Fix eq method in update_records
+  - [ ] Fix eq method in delete_records
+  - [ ] Add better error messages for common failures

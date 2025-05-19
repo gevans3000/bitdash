@@ -42,6 +42,46 @@
     </div>
   </div>
   
+  <div class="bollinger-container">
+    <h2>Bollinger Bands (BTC)</h2>
+    <div class="bollinger-summary">
+      <div class="bollinger-metric">
+        <span class="metric-label">Current Price:</span>
+        <span id="bb-current-price" class="metric-value">-</span>
+      </div>
+      <div class="bollinger-metric">
+        <span class="metric-label">Upper Band:</span>
+        <span id="bb-upper" class="metric-value">-</span>
+      </div>
+      <div class="bollinger-metric">
+        <span class="metric-label">Middle Band (SMA20):</span>
+        <span id="bb-middle" class="metric-value">-</span>
+      </div>
+      <div class="bollinger-metric">
+        <span class="metric-label">Lower Band:</span>
+        <span id="bb-lower" class="metric-value">-</span>
+      </div>
+      <div class="bollinger-metric">
+        <span class="metric-label">%B:</span>
+        <span id="bb-percent-b" class="metric-value">-</span>
+      </div>
+      <div class="bollinger-metric">
+        <span class="metric-label">Bandwidth:</span>
+        <span id="bb-bandwidth" class="metric-value">-</span>
+      </div>
+    </div>
+    <div class="bollinger-visual">
+      <div class="bollinger-visual-inner" id="bb-visual">
+        <div class="price-indicator" id="bb-price-indicator"></div>
+      </div>
+      <div class="bollinger-labels">
+        <span>Lower</span>
+        <span>Middle (SMA20)</span>
+        <span>Upper</span>
+      </div>
+    </div>
+  </div>
+
   <h2>Top 7 Trending Coins</h2>
   <ul id="trending"></ul>
   <script>
@@ -71,6 +111,13 @@
     }
     function renderTable(data) {
       const { btc, eth, spy, spx, fearGreed } = data;
+      if (!btc) return;
+      
+      // Render Bollinger Bands data if available
+      if (btc.bollingerBands) {
+        renderBollingerBands(btc);
+      }
+      
       const rows = [
         ['Current Price (USD)', 
           btc ? `$${formatNum(btc.price)}` : '-', 
@@ -196,8 +243,94 @@
     }
     function renderLastUpdated(dt) {
       if (!dt) return;
-      const d = new Date(dt);
-      document.getElementById('last-updated').textContent = 'Last updated: ' + d.toLocaleString();
+      const el = document.getElementById('last-updated');
+      if (el) el.textContent = `Last updated: ${new Date(dt).toLocaleString()}`;
+    }
+    
+    function renderBollingerBands(btcData) {
+      if (!btcData || !btcData.bollingerBands) return;
+      
+      const bb = btcData.bollingerBands;
+      const currentPrice = btcData.price;
+      
+      // Update metric values
+      const updateElement = (id, value, isPrice = true) => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.textContent = isPrice ? `$${value.toFixed(2)}` : `${value.toFixed(2)}%`;
+        }
+      };
+      
+      updateElement('bb-current-price', currentPrice);
+      updateElement('bb-upper', bb.upper);
+      updateElement('bb-middle', bb.middle);
+      updateElement('bb-lower', bb.lower);
+      
+      // Update %B with conditional styling
+      const percentB = bb.percentB;
+      const percentBElement = document.getElementById('bb-percent-b');
+      if (percentBElement) {
+        percentBElement.textContent = percentB.toFixed(2) + '%';
+        percentBElement.className = '';
+        if (percentB > 80) {
+          percentBElement.classList.add('overbought');
+        } else if (percentB < 20) {
+          percentBElement.classList.add('oversold');
+        }
+      }
+      
+      // Update bandwidth with conditional styling
+      const bandwidth = bb.bandwidth;
+      const bandwidthElement = document.getElementById('bb-bandwidth');
+      if (bandwidthElement) {
+        bandwidthElement.textContent = bandwidth.toFixed(2) + '%';
+        bandwidthElement.className = bandwidth > 5 ? 'high' : 'low';
+      }
+      
+      // Update visual indicator
+      updateBollingerVisual(btcData);
+    }
+    
+    function updateBollingerVisual(btcData) {
+      const bb = btcData.bollingerBands;
+      const visual = document.getElementById('bb-visual');
+      const indicator = document.getElementById('bb-price-indicator');
+      
+      if (!visual || !indicator) return;
+      
+      const currentPrice = btcData.price;
+      const range = bb.upper - bb.lower;
+      
+      if (range <= 0) return; // Prevent division by zero
+      
+      // Calculate position (0 = bottom, 1 = top)
+      let position = (bb.upper - currentPrice) / range;
+      position = Math.max(0, Math.min(1, position)); // Clamp between 0 and 1
+      
+      // Set indicator position (from top of container)
+      const indicatorPosition = position * 100; // Convert to percentage
+      indicator.style.top = `${indicatorPosition}%`;
+      
+      // Add tooltip with current price and position
+      const positionPct = (position * 100).toFixed(1);
+      indicator.title = `$${currentPrice.toFixed(2)} (${positionPct}% between bands)`;
+      
+      // Calculate band heights as percentages of the visual height
+      const upperBandPct = ((bb.upper - bb.middle) / range) * 50;
+      const lowerBandPct = ((bb.middle - bb.lower) / range) * 50;
+      
+      // Create gradient for the bands
+      visual.style.background = `
+        linear-gradient(
+          to bottom,
+          #f8d7da 0%,
+          #f8d7da ${50 - upperBandPct}%,
+          #fff5f5 ${50 - upperBandPct}%,
+          #fff5f5 ${50 + lowerBandPct}%,
+          #d4edda ${50 + lowerBandPct}%,
+          #d4edda 100%
+        )
+      `;
     }
     async function update() {
       try {

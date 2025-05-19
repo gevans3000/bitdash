@@ -83,10 +83,69 @@ bitdash/
 - Use ESLint and Prettier for code formatting
 
 ## Testing Strategy
-- Unit tests for utility functions and hooks
-- Component tests with React Testing Library
-- Integration tests for critical user flows
-- End-to-end tests for main features
+
+### Unit Testing
+- Test all utility functions with 100% coverage
+- Test custom hooks in isolation
+- Mock external dependencies
+- Include edge cases and error conditions
+
+### Component Testing
+- Use React Testing Library for all components
+- Test component rendering with different props
+- Test user interactions
+- Test error boundaries
+
+### Integration Testing
+- Test component interactions
+- Test data flow between components
+- Test API integrations with MSW (Mock Service Worker)
+
+### End-to-End Testing
+- Critical user journeys with Cypress
+- Cross-browser testing
+- Performance testing for critical paths
+
+### Test Structure
+```
+__tests__/
+  ├── unit/           # Unit tests
+  ├── components/      # Component tests
+  ├── integration/     # Integration tests
+  └── e2e/            # End-to-end tests
+```
+
+## Code Style & Conventions
+
+### General
+- Follow [Airbnb JavaScript Style Guide](https://github.com/airbnb/javascript)
+- Use ES6+ features
+- Prefer functional programming patterns
+- Use named exports over default exports
+
+### Naming Conventions
+- Components: PascalCase (`Button.jsx`)
+- Utilities/Functions: camelCase (`formatDate.js`)
+- Constants: UPPER_SNAKE_CASE (`API_ENDPOINTS.js`)
+- Test files: `ComponentName.test.jsx`
+
+### File Structure
+- Keep files under 500 lines
+- One component per file
+- Co-locate tests with source files
+- Group by feature, not by type
+
+### Documentation
+- Document all props with PropTypes or TypeScript
+- Use JSDoc for complex functions
+- Keep READMEs updated
+- Document component examples in Storybook
+
+### Linting & Formatting
+- ESLint with Airbnb config
+- Prettier for code formatting
+- Husky pre-commit hooks
+- Lint-staged for optimized commits
 
 ## Dependencies
 - React 18+
