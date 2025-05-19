@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CryptoDashboard</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>CryptoDashboard</h1>
+  <div id="last-updated"></div>
+  <table id="crypto-table">
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Bitcoin (BTC)</th>
+        <th>Ethereum (ETH)</th>
+        <th>SPY</th>
+        <th>S&P 500 (SPX)</th>
+      </tr>
+    </thead>
+    <tbody id="table-body">
+      <!-- Data will be inserted here -->
+    </tbody>
+  </table>
+  <div id="fear-greed"></div>
+  <h2>Top 7 Trending Coins</h2>
+  <ul id="trending"></ul>
+  <script>
+    async function fetchDashboard() {
+      const res = await fetch('/api/dashboard');
+      return res.json();
+    }
+    function getCellColor(metric, obj, fg) {
+      // Bullish: price>SMA, RSI<30, Fear≤20 (green)
+      // Bearish: price<SMA, RSI>70, Fear≥80 (red)
+      const colors = { bullish: '#d4ffd4', bearish: '#ffd4d4', neutral: '' };
+      if (!obj) return '';
+      return {
+        price: obj.price > obj.sma50 ? colors.bullish : colors.bearish,
+        sma50: '',
+        rsi14: obj.rsi14 < 30 ? colors.bullish : obj.rsi14 > 70 ? colors.bearish : colors.neutral,
+        macd: '',
+        macdSignal: '',
+        macdHist: '',
+        change24h: obj.change24h > 0 ? colors.bullish : colors.bearish,
+        volume24h: '',
+        fear: fg && fg.value <= 20 ? colors.bullish : fg && fg.value >= 80 ? colors.bearish : colors.neutral
+      }[metric] || '';
+    }
+    function formatNum(n, d=2) {
+      return n == null ? '-' : n.toLocaleString(undefined, {maximumFractionDigits: d});
+    }
+    function renderTable(data) {
+      const { btc, eth, spy, spx, fearGreed } = data;
+      const rows = [
+        ['Current Price (USD)', 
+          btc ? `$${formatNum(btc.price)}` : '-', 
+          eth ? `$${formatNum(eth.price)}` : '-', 
+          spy ? `$${formatNum(spy.price)}` : '-',
+          spx ? formatNum(spx.price) : '-'],
+        ['24h % Change', 
+          btc ? formatNum(btc.change24h) + '%' : '-', 
+          eth ? formatNum(eth.change24h) + '%' : '-', 
+          spy ? formatNum(spy.change24h) + '%' : '-',
+          spx ? formatNum(spx.change24h) + '%' : '-'],
+        ['24h Volume', 
+          btc ? `$${formatNum(btc.volume24h,0)}` : '-', 
+          eth ? `$${formatNum(eth.volume24h,0)}` : '-', 
+          spy ? `$${formatNum(spy.volume24h,0)}` : '-',
+          spx ? formatNum(spx.volume24h,0) : '-'],
+        ['SMA-50', 
+          btc ? `$${formatNum(btc.sma50)}` : '-', 
+          eth ? `$${formatNum(eth.sma50)}` : '-', 
+          spy ? `$${formatNum(spy.sma50)}` : '-',
+          spx ? formatNum(spx.sma50) : '-'],
+        ['RSI-14', 
+          btc ? formatNum(btc.rsi14) : '-', 
+          eth ? formatNum(eth.rsi14) : '-', 
+          spy ? formatNum(spy.rsi14) : '-',
+          spx ? formatNum(spx.rsi14) : '-'],
+        ['MACD', 
+          btc ? formatNum(btc.macd) : '-', 
+          eth ? formatNum(eth.macd) : '-', 
+          spy ? formatNum(spy.macd) : '-',
+          spx ? formatNum(spx.macd) : '-'],
+        ['MACD Signal', 
+          btc ? formatNum(btc.macdSignal) : '-', 
+          eth ? formatNum(eth.macdSignal) : '-', 
+          spy ? formatNum(spy.macdSignal) : '-',
+          spx ? formatNum(spx.macdSignal) : '-'],
+        ['MACD Histogram', 
+          btc ? formatNum(btc.macdHist) : '-', 
+          eth ? formatNum(eth.macdHist) : '-', 
+          spy ? formatNum(spy.macdHist) : '-',
+          spx ? formatNum(spx.macdHist) : '-']
+      ];
+      const metrics = ['price','change24h','volume24h','sma50','rsi14','macd','macdSignal','macdHist'];
+      let html = '';
+      for (let i = 0; i < rows.length; i++) {
+        html += `<tr>`;
+        html += `<td>${rows[i][0]}</td>`;
+        html += `<td style="background:${btc ? getCellColor(metrics[i], btc, fearGreed) : ''}">${rows[i][1]}</td>`;
+        html += `<td style="background:${eth ? getCellColor(metrics[i], eth, fearGreed) : ''}">${rows[i][2]}</td>`;
+        html += `<td style="background:${spy ? getCellColor(metrics[i], spy, fearGreed) : ''}">${rows[i][3]}</td>`;
+        html += `<td style="background:${spx ? getCellColor(metrics[i], spx, fearGreed) : ''}">${rows[i][4]}</td>`;
+        html += `</tr>`;
+      }
+      document.getElementById('table-body').innerHTML = html;
+      document.getElementById('fear-greed').innerHTML = fearGreed ? `<b>Fear & Greed Index:</b> ${fearGreed.value} (${fearGreed.label})` : '';
+    }
+    function renderTrending(trending) {
+      document.getElementById('trending').innerHTML = trending.map(c => `<li>${c}</li>`).join('');
+    }
+    function renderLastUpdated(dt) {
+      if (!dt) return;
+      const d = new Date(dt);
+      document.getElementById('last-updated').textContent = 'Last updated: ' + d.toLocaleString();
+    }
+    async function update() {
+      try {
+        const data = await fetchDashboard();
+        renderTable(data);
+        renderTrending(data.trending || []);
+        renderLastUpdated(data.lastUpdated);
+      } catch (e) {
+        document.getElementById('table-body').innerHTML = '<tr><td colspan="5">Failed to load data.</td></tr>';
+      }
+    }
+    update();
+    setInterval(update, 60000);
+  </script>
+</body>
+</html>

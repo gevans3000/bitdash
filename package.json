@@ -1,0 +1,13 @@
+{
+  "name": "cryptodashboard",
+  "version": "1.0.0",
+  "description": "Local dashboard for Bitcoin and Ethereum metrics using CoinGecko and Alternative.me APIs.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.7",
+    "express": "^4.19.2"
+  }
+}
