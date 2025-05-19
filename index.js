@@ -91,12 +91,35 @@ async function fetchCoinData(coinId) {
     const rsi14 = rsi(closes, 14);
     const macdObj = macd(closes, 12, 26, 9);
 
-    // Find swing highs and lows
+    // Get volume data if available
+    const volumes = histRes.data.total_volumes?.map(([timestamp, volume]) => ({
+      timestamp,
+      volume
+    })) || [];
+
+    // Create volume map by timestamp for quick lookup
+    const volumeMap = new Map(volumes.map(v => [v.timestamp, v.volume]));
+
+    // Find swing highs and lows with volume data
     const { swingHighs, swingLows } = findSwingHighsAndLows(priceData, 3, 3);
     
-    // Group nearby levels
-    const supportLevels = groupPriceLevels(swingLows).sort((a, b) => b.strength - a.strength);
-    const resistanceLevels = groupPriceLevels(swingHighs).sort((a, b) => b.strength - a.strength);
+    // Add volume data to swing points
+    const enhanceWithVolume = (points) => 
+      points.map(p => ({
+        ...p,
+        volume: volumeMap.get(p.timestamp) || 0,
+        strength: 1 // Base strength
+      }));
+    
+    // Group nearby levels with enhanced clustering
+    const clusterOptions = {
+      threshold: 0.01, // 1% price threshold
+      volumeWeighted: true,
+      timeDecay: true
+    };
+    
+    const supportLevels = groupPriceLevels(enhanceWithVolume(swingLows), clusterOptions);
+    const resistanceLevels = groupPriceLevels(enhanceWithVolume(swingHighs), clusterOptions);
 
     return {
       price: market.current_price,

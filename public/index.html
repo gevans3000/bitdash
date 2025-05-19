@@ -125,6 +125,19 @@
       document.getElementById('trending').innerHTML = trending.map(c => `<li>${c}</li>`).join('');
     }
     
+    function formatDate(timestamp) {
+      if (!timestamp) return 'N/A';
+      const date = new Date(timestamp);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    function formatVolume(volume) {
+      if (volume >= 1e9) return (volume / 1e9).toFixed(1) + 'B';
+      if (volume >= 1e6) return (volume / 1e6).toFixed(1) + 'M';
+      if (volume >= 1e3) return (volume / 1e3).toFixed(1) + 'K';
+      return volume.toFixed(0);
+    }
+
     function renderSupportResistanceLevels(btcData) {
       if (!btcData) return;
       
@@ -135,16 +148,34 @@
           return;
         }
         
-        container.innerHTML = levels.map(level => `
-          <div class="level-item">
-            <span>$${level.price.toFixed(2)}</span>
-            <span class="level-strength">Strength: ${level.strength.toFixed(1)}</span>
-          </div>
-        `).join('');
+        container.innerHTML = levels.slice(0, 5).map(level => {
+          const strengthPercent = Math.min(100, Math.round(level.strength * 20));
+          const touchInfo = level.touches > 1 
+            ? `${level.touches} touches` 
+            : '1 touch';
+          const volumeInfo = level.volume > 0 
+            ? `• Vol: ${formatVolume(level.volume)}` 
+            : '';
+          const lastTouch = level.lastTouch 
+            ? `• Last: ${formatDate(level.lastTouch)}` 
+            : '';
+          
+          return `
+            <div class="level-item" data-strength="${strengthPercent}">
+              <div class="level-price">$${level.price.toFixed(2)}</div>
+              <div class="level-meta">
+                <span class="level-strength">${strengthPercent}% strength</span>
+                <span class="level-details">
+                  ${touchInfo} ${volumeInfo} ${lastTouch}
+                </span>
+              </div>
+            </div>
+          `;
+        }).join('');
       };
       
-      renderLevels(btcData.supportLevels, 'support-levels');
-      renderLevels(btcData.resistanceLevels, 'resistance-levels');
+      renderLevels(btcData.supportLevels || [], 'support-levels');
+      renderLevels(btcData.resistanceLevels || [], 'resistance-levels');
     }
     function renderLastUpdated(dt) {
       if (!dt) return;

@@ -87,30 +87,90 @@ h2 {
 
 .level-item {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
   margin: 8px 0;
-  padding: 10px 15px;
-  background: #f8fafc;
+  padding: 12px 15px;
+  background: #fff;
   border-radius: 6px;
   border-left: 4px solid #4a90e2;
-  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
 }
 
 #resistance-levels .level-item {
   border-left-color: #e74c3c;
 }
 
+.level-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 0;
+  background: rgba(74, 144, 226, 0.1);
+  transition: width 0.3s ease;
+  z-index: 0;
+}
+
+#resistance-levels .level-item::before {
+  background: rgba(231, 76, 60, 0.1);
+}
+
 .level-item:hover {
   transform: translateX(4px);
-  box-shadow: 0 2px 8px #0001;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.level-item:hover::before {
+  width: 100%;
+}
+
+.level-price {
+  font-size: 1.1em;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 4px;
+  position: relative;
+  z-index: 1;
+}
+
+.level-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.85em;
+  color: #7f8c8d;
+  position: relative;
+  z-index: 1;
 }
 
 .level-strength {
-  font-size: 0.85em;
-  color: #666;
-  background: #fff;
+  font-weight: 600;
+  color: #2ecc71;
+  background: rgba(46, 204, 113, 0.1);
   padding: 2px 8px;
   border-radius: 10px;
-  font-weight: 500;
+  white-space: nowrap;
+}
+
+.level-details {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: #95a5a6;
+  font-size: 0.9em;
+}
+
+/* Strength-based styling */
+.level-item[data-strength="100"] .level-strength { color: #27ae60; background: rgba(39, 174, 96, 0.1); }
+.level-item[data-strength^="8"], .level-item[data-strength^="9"] .level-strength { color: #2ecc71; background: rgba(46, 204, 113, 0.1); }
+.level-item[data-strength^="6"], .level-item[data-strength^="7"] .level-strength { color: #f1c40f; background: rgba(241, 196, 15, 0.1); }
+.level-item[data-strength^="4"], .level-item[data-strength^="5"] .level-strength { color: #e67e22; background: rgba(230, 126, 34, 0.1); }
+.level-item[data-strength^="0"], .level-item[data-strength^="1"], 
+.level-item[data-strength^="2"], .level-item[data-strength^="3"] .level-strength { 
+  color: #e74c3c; 
+  background: rgba(231, 76, 60, 0.1); 
 }

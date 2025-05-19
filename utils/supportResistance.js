@@ -77,18 +77,36 @@ function findSwingHighsAndLows(prices, leftBars = 3, rightBars = 3) {
 }
 
 /**
- * Groups nearby price levels and calculates their strength
- * @param {Array} levels - Array of price levels (highs and lows)
- * @param {number} threshold - Percentage threshold to group levels (0.01 = 1%)
- * @returns {Array} Array of grouped levels with strength
+ * Calculates time decay factor for a timestamp
+ * @param {number} timestamp - Timestamp to calculate decay for
+ * @param {number} halfLife - Time in ms for strength to halve (default: 30 days)
+ * @returns {number} Decay factor between 0 and 1
  */
-function groupPriceLevels(levels, threshold = 0.01) {
+function calculateTimeDecay(timestamp, halfLife = 30 * 24 * 60 * 60 * 1000) {
+    const now = Date.now();
+    const age = now - timestamp;
+    return Math.pow(0.5, age / halfLife);
+}
+
+/**
+ * Groups nearby price levels using advanced clustering
+ * @param {Array} levels - Array of price levels with volume and timestamp
+ * @param {Object} options - Configuration options
+ * @param {number} options.threshold - Price threshold as decimal (0.01 = 1%)
+ * @param {boolean} options.volumeWeighted - Whether to use volume weighting
+ * @param {boolean} options.timeDecay - Whether to apply time decay
+ * @returns {Array} Array of grouped levels with strength metrics
+ */
+function groupPriceLevels(levels, {
+    threshold = 0.01,
+    volumeWeighted = true,
+    timeDecay = true
+} = {}) {
     if (!levels.length) return [];
     
     // Sort levels by price
     const sorted = [...levels].sort((a, b) => a.price - b.price);
     const result = [];
-    
     let currentGroup = [sorted[0]];
     
     for (let i = 1; i < sorted.length; i++) {
@@ -99,38 +117,70 @@ function groupPriceLevels(levels, threshold = 0.01) {
         if (Math.abs((level.price - lastInGroup.price) / lastInGroup.price) <= threshold) {
             currentGroup.push(level);
         } else {
-            // Calculate average price and total strength for the group
-            const avgPrice = currentGroup.reduce((sum, l) => sum + l.price, 0) / currentGroup.length;
-            const strength = currentGroup.reduce((sum, l) => sum + (l.strength || 1), 0);
-            
-            result.push({
-                price: avgPrice,
-                strength: strength,
-                touches: currentGroup.length,
-                type: currentGroup[0].type, // All in group should be same type
-                timestamps: currentGroup.map(l => l.timestamp)
-            });
-            
+            // Process the current group
+            processGroup(currentGroup, result, { volumeWeighted, timeDecay });
             // Start new group
             currentGroup = [level];
         }
     }
     
-    // Add the last group
+    // Process the last group
     if (currentGroup.length > 0) {
-        const avgPrice = currentGroup.reduce((sum, l) => sum + l.price, 0) / currentGroup.length;
-        const strength = currentGroup.reduce((sum, l) => sum + (l.strength || 1), 0);
-        
-        result.push({
-            price: avgPrice,
-            strength: strength,
-            touches: currentGroup.length,
-            type: currentGroup[0].type,
-            timestamps: currentGroup.map(l => l.timestamp)
-        });
+        processGroup(currentGroup, result, { volumeWeighted, timeDecay });
     }
     
-    return result;
+    // Sort by strength in descending order
+    return result.sort((a, b) => b.strength - a.strength);
+}
+
+/**
+ * Processes a group of similar price levels into a single level
+ * @private
+ */
+function processGroup(levels, result, { volumeWeighted, timeDecay }) {
+    if (!levels.length) return;
+    
+    // Calculate volume-weighted average price if volume data is available
+    let totalVolume = 0;
+    let totalValue = 0;
+    let totalStrength = 0;
+    let maxVolume = 0;
+    const now = Date.now();
+    
+    levels.forEach(level => {
+        const volume = level.volume || 1; // Default to 1 if no volume data
+        const timeFactor = timeDecay ? calculateTimeDecay(level.timestamp || now) : 1;
+        const weight = volumeWeighted ? volume * timeFactor : timeFactor;
+        
+        totalValue += level.price * weight;
+        totalVolume += volume;
+        totalStrength += (level.strength || 1) * timeFactor;
+        maxVolume = Math.max(maxVolume, volume);
+    });
+    
+    const avgPrice = volumeWeighted 
+        ? totalValue / (volumeWeighted ? totalVolume : levels.length)
+        : levels.reduce((sum, l) => sum + l.price, 0) / levels.length;
+    
+    // Calculate strength based on number of touches, volume, and recency
+    const baseStrength = Math.sqrt(levels.length); // Diminishing returns on more touches
+    const volumeFactor = Math.log10(maxVolume + 1) * 0.5 + 1; // Log scale for volume
+    const strength = baseStrength * volumeFactor * (volumeWeighted ? 1.0 : 0.8);
+    
+    // Get most recent timestamp
+    const latestTimestamp = Math.max(...levels.map(l => l.timestamp || 0));
+    
+    result.push({
+        price: avgPrice,
+        strength: strength,
+        touches: levels.length,
+        type: levels[0].type, // All in group should be same type
+        volume: totalVolume,
+        maxVolume: maxVolume,
+        lastTouch: latestTimestamp,
+        firstTouch: Math.min(...levels.map(l => l.timestamp || now)),
+        timestamps: levels.map(l => l.timestamp).filter(Boolean)
+    });
 }
 
 module.exports = {
