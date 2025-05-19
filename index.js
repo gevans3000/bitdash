@@ -121,6 +121,15 @@ async function fetchCoinData(coinId) {
     const supportLevels = groupPriceLevels(enhanceWithVolume(swingLows), clusterOptions);
     const resistanceLevels = groupPriceLevels(enhanceWithVolume(swingHighs), clusterOptions);
 
+    // Get date range from price data
+    const timestamps = priceData.map(p => p.timestamp).filter(Boolean);
+    const dateRange = timestamps.length > 0 
+      ? {
+          start: new Date(Math.min(...timestamps)),
+          end: new Date(Math.max(...timestamps))
+        }
+      : null;
+
     return {
       price: market.current_price,
       change24h: market.price_change_percentage_24h,
@@ -131,7 +140,13 @@ async function fetchCoinData(coinId) {
       macdSignal: macdObj.signal[macdObj.signal.length - 1],
       macdHist: macdObj.histogram[macdObj.histogram.length - 1],
       supportLevels: supportLevels.slice(0, 5), // Top 5 support levels
-      resistanceLevels: resistanceLevels.slice(0, 5) // Top 5 resistance levels
+      resistanceLevels: resistanceLevels.slice(0, 5), // Top 5 resistance levels
+      dateRange: dateRange ? {
+        start: dateRange.start.toISOString(),
+        end: dateRange.end.toISOString(),
+        startYear: dateRange.start.getFullYear(),
+        endYear: dateRange.end.getFullYear()
+      } : null
     };
   } catch (err) {
     logError(`Failed to fetch data for ${coinId}`, err);

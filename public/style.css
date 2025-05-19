@@ -77,12 +77,33 @@ h2 {
   box-shadow: 0 2px 8px #0001;
 }
 
-.levels-box h3 {
-  margin-top: 0;
-  border-bottom: 1px solid #eee;
+.levels-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
   padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+}
+
+.levels-box h3 {
+  margin: 0;
   color: #333;
-  text-align: center;
+  font-size: 1.1em;
+}
+
+.date-range {
+  font-size: 0.8em;
+  color: #7f8c8d;
+  background: #f0f2f5;
+  padding: 2px 8px;
+  border-radius: 10px;
+  cursor: help;
+  white-space: nowrap;
+}
+
+.date-range:hover {
+  background: #e1e4e8;
 }
 
 .level-item {

@@ -5,23 +5,23 @@
 ### 1. Support and Resistance Levels
 #### Backend
 - [x] Create function to identify swing highs/lows from price data
-- [ ] Implement enhanced clustering algorithm to group nearby price levels:
-  - [ ] Add volume-weighted price zones
-  - [ ] Implement time-based decay for older levels
+- [x] Implement enhanced clustering algorithm to group nearby price levels:
+  - [x] Add volume-weighted price zones
+  - [x] Implement time-based decay for older levels
   - [ ] Add support for different timeframes (1h, 4h, 1d)
-  - [ ] Optimize performance for real-time updates
-- [ ] Calculate strength score for each level based on:
-  - [ ] Number of touches
-  - [ ] Recency of touches
-  - [ ] Volume at touch points
-  - [ ] Time spent near the level
-- [ ] Add API endpoint to serve support/resistance data
+  - [x] Optimize performance for real-time updates
+- [x] Calculate strength score for each level based on:
+  - [x] Number of touches
+  - [x] Recency of touches
+  - [x] Volume at touch points
+  - [x] Time spent near the level
+- [x] Add API endpoint to serve support/resistance data
 
 #### Frontend
 - [ ] Add support/resistance lines to price chart
-- [ ] Implement level strength visualization (line thickness/opacity)
-- [ ] Add tooltips showing level details (price, strength, last touch)
-- [ ] Create toggle to show/hide support/resistance levels
+- [x] Implement level strength visualization (line thickness/opacity)
+- [x] Add tooltips showing level details (price, strength, last touch, date range)
+- [x] Create toggle to show/hide support/resistance levels
 
 ### 2. Bollinger Bands
 #### Backend

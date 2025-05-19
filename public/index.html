@@ -27,11 +27,17 @@
   
   <div class="levels-container">
     <div class="levels-box">
-      <h3>Support Levels (BTC)</h3>
+      <div class="levels-header">
+        <h3>Support Levels (BTC)</h3>
+        <div id="support-date-range" class="date-range"></div>
+      </div>
       <div id="support-levels"></div>
     </div>
     <div class="levels-box">
-      <h3>Resistance Levels (BTC)</h3>
+      <div class="levels-header">
+        <h3>Resistance Levels (BTC)</h3>
+        <div id="resistance-date-range" class="date-range"></div>
+      </div>
       <div id="resistance-levels"></div>
     </div>
   </div>
@@ -140,6 +146,17 @@
 
     function renderSupportResistanceLevels(btcData) {
       if (!btcData) return;
+      
+      // Update date range display
+      const updateDateRange = (elementId, dateRange) => {
+        const container = document.getElementById(elementId);
+        if (!container || !dateRange) return;
+        container.textContent = `${dateRange.startYear} - ${dateRange.endYear}`;
+        container.title = `Data from ${new Date(dateRange.start).toLocaleDateString()} to ${new Date(dateRange.end).toLocaleDateString()}`;
+      };
+      
+      updateDateRange('support-date-range', btcData.dateRange);
+      updateDateRange('resistance-date-range', btcData.dateRange);
       
       const renderLevels = (levels, containerId) => {
         const container = document.getElementById(containerId);
