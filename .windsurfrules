@@ -19,7 +19,7 @@
 
 ### ✅ Task Completion
 - **Mark completed tasks in [TASKS.md]** immediately after finishing them.
-- Add new sub-tasks or TODOs discovered during development to [TASKS.md]under a "Discovered During Work" section.
+- Add new sub-tasks or TODOs discovered during development to [TASKS.md]under a "Discovered During Work" section. THEN CREATE A GITHUB COMMIT WITH A MESSAGE OF WHAT YOU DID
 
 ### 📎 Style & Conventions
 - **Use TypeScript/JavaScript** as the primary language for the React frontend.

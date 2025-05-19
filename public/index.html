@@ -24,6 +24,18 @@
     </tbody>
   </table>
   <div id="fear-greed"></div>
+  
+  <div class="levels-container">
+    <div class="levels-box">
+      <h3>Support Levels (BTC)</h3>
+      <div id="support-levels"></div>
+    </div>
+    <div class="levels-box">
+      <h3>Resistance Levels (BTC)</h3>
+      <div id="resistance-levels"></div>
+    </div>
+  </div>
+  
   <h2>Top 7 Trending Coins</h2>
   <ul id="trending"></ul>
   <script>
@@ -112,6 +124,28 @@
     function renderTrending(trending) {
       document.getElementById('trending').innerHTML = trending.map(c => `<li>${c}</li>`).join('');
     }
+    
+    function renderSupportResistanceLevels(btcData) {
+      if (!btcData) return;
+      
+      const renderLevels = (levels, containerId) => {
+        const container = document.getElementById(containerId);
+        if (!levels || levels.length === 0) {
+          container.innerHTML = '<p>No data available</p>';
+          return;
+        }
+        
+        container.innerHTML = levels.map(level => `
+          <div class="level-item">
+            <span>$${level.price.toFixed(2)}</span>
+            <span class="level-strength">Strength: ${level.strength.toFixed(1)}</span>
+          </div>
+        `).join('');
+      };
+      
+      renderLevels(btcData.supportLevels, 'support-levels');
+      renderLevels(btcData.resistanceLevels, 'resistance-levels');
+    }
     function renderLastUpdated(dt) {
       if (!dt) return;
       const d = new Date(dt);
@@ -123,7 +157,11 @@
         renderTable(data);
         renderTrending(data.trending || []);
         renderLastUpdated(data.lastUpdated);
+        if (data.btc) {
+          renderSupportResistanceLevels(data.btc);
+        }
       } catch (e) {
+        console.error('Update failed:', e);
         document.getElementById('table-body').innerHTML = '<tr><td colspan="5">Failed to load data.</td></tr>';
       }
     }

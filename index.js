@@ -24,6 +24,7 @@ const express = require('express');
 const axios = require('axios');
 const path = require('path');
 const { sma, rsi, macd } = require('./utils/indicators');
+const { findSwingHighsAndLows, groupPriceLevels } = require('./utils/supportResistance');
 
 const UPDATE_INTERVAL_MS = 60000; // 1 minute
 const PORT = 3000;
@@ -77,12 +78,25 @@ async function fetchCoinData(coinId) {
         timeout: 10000
       }
     );
-    const closes = histRes.data.prices.map(p => p[1]);
+    const priceData = histRes.data.prices.map(([timestamp, price]) => ({
+      timestamp,
+      price,
+      date: new Date(timestamp)
+    }));
 
-    // Indicators
+    const closes = priceData.map(p => p.price);
+
+    // Calculate indicators
     const sma50 = sma(closes, 50);
     const rsi14 = rsi(closes, 14);
     const macdObj = macd(closes, 12, 26, 9);
+
+    // Find swing highs and lows
+    const { swingHighs, swingLows } = findSwingHighsAndLows(priceData, 3, 3);
+    
+    // Group nearby levels
+    const supportLevels = groupPriceLevels(swingLows).sort((a, b) => b.strength - a.strength);
+    const resistanceLevels = groupPriceLevels(swingHighs).sort((a, b) => b.strength - a.strength);
 
     return {
       price: market.current_price,
@@ -92,7 +106,9 @@ async function fetchCoinData(coinId) {
       rsi14: rsi14[rsi14.length - 1],
       macd: macdObj.macd[macdObj.macd.length - 1],
       macdSignal: macdObj.signal[macdObj.signal.length - 1],
-      macdHist: macdObj.histogram[macdObj.histogram.length - 1]
+      macdHist: macdObj.histogram[macdObj.histogram.length - 1],
+      supportLevels: supportLevels.slice(0, 5), // Top 5 support levels
+      resistanceLevels: resistanceLevels.slice(0, 5) // Top 5 resistance levels
     };
   } catch (err) {
     logError(`Failed to fetch data for ${coinId}`, err);
