@@ -31,20 +31,24 @@ const { calculateBollingerBands } = require('./utils/bollingerBands');
 
 // Configuration
 const config = {
-  updateIntervalMs: process.env.UPDATE_INTERVAL_MS ? parseInt(process.env.UPDATE_INTERVAL_MS) : 60000, // 1 minute default
+  // Increased update interval to 10 minutes to reduce API calls
+  updateIntervalMs: process.env.UPDATE_INTERVAL_MS ? parseInt(process.env.UPDATE_INTERVAL_MS) : 600000, // 10 minutes default
   port: process.env.PORT || 3000,
   coinGecko: {
     apiKey: process.env.COINGECKO_API_KEY || '',
     baseUrl: 'https://api.coingecko.com/api/v3',
-    // Rate limits: 10-50 calls/minute (without API key), higher with API key
-    rateLimit: process.env.COINGECKO_API_KEY ? 50 : 10, // calls per minute
+    // Be more conservative with rate limits
+    rateLimit: process.env.COINGECKO_API_KEY ? 30 : 8, // Reduced from 50/10 to 30/8 calls per minute
     rateLimitWindow: 60 * 1000, // 1 minute
+    // Add retry configuration with backoff
+    maxRetries: 2, // Reduced from 3
+    retryDelay: 10000, // Increased from 5s to 10s
   },
   cache: {
-    // Cache TTL in seconds (5 minutes default)
-    ttl: process.env.CACHE_TTL ? parseInt(process.env.CACHE_TTL) : 300,
-    // Check for expired items every 60 seconds
-    checkperiod: 60,
+    // Increased cache TTL to 15 minutes (900 seconds)
+    ttl: process.env.CACHE_TTL ? parseInt(process.env.CACHE_TTL) : 900,
+    // Check for expired items every 120 seconds
+    checkperiod: 120,
   },
 };
 
@@ -133,28 +137,6 @@ let dashboardData = {
   }
 };
 
-// Track rate limit usage
-const updateRateLimitInfo = (headers) => {
-  if (!headers) return;
-  
-  const remaining = parseInt(headers['x-ratelimit-remaining']) || config.coinGecko.rateLimit;
-  const reset = parseInt(headers['x-ratelimit-reset']) || 0;
-  const used = config.coinGecko.rateLimit - remaining;
-  const remainingTime = reset > 0 ? Math.max(0, reset - Math.floor(Date.now() / 1000)) : 0;
-  
-  dashboardData.rateLimit = {
-    remaining,
-    reset,
-    used,
-    remainingTime
-  };
-  
-  // Log rate limit status
-  if (remaining < config.coinGecko.rateLimit * 0.2) {
-    console.warn(`Approaching rate limit: ${remaining} requests remaining`);
-  }
-};
-
 // Utility for logging errors
 function logError(message, error) {
   const timestamp = new Date().toISOString();
@@ -169,7 +151,7 @@ function logError(message, error) {
   }
 }
 
-// Update rate limit information from API response headers
+// Track rate limit usage and update from API response headers
 function updateRateLimitInfo(headers) {
   if (!headers) return;
   
@@ -203,10 +185,70 @@ function updateRateLimitInfo(headers) {
 const getMarketCacheKey = (coinId) => `market_${coinId}`;
 const getHistoryCacheKey = (coinId) => `history_${coinId}`;
 
+// Helper function to delay execution
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Fetch market data with retry logic and better caching
+async function fetchWithRetry(url, options = {}, cacheKey = null, retries = config.coinGecko.maxRetries, delayMs = config.coinGecko.retryDelay) {
+  // Try to get from cache first if cacheKey is provided
+  if (cacheKey) {
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      console.log(`Using cached data for ${cacheKey}`);
+      return cached;
+    }
+  }
+
+  try {
+    const response = await axios({
+      url,
+      ...options,
+      headers: {
+        ...(config.coinGecko.apiKey ? { 'x-cg-pro-api-key': config.coinGecko.apiKey } : {}),
+        ...options.headers,
+      },
+      timeout: 15000, // Increased timeout
+    });
+    
+    // Update rate limit info from response headers
+    updateRateLimitInfo(response.headers);
+    
+    // Cache the successful response if cacheKey is provided
+    if (cacheKey && response.data) {
+      cache.set(cacheKey, response.data);
+    }
+    
+    return response.data;
+    
+  } catch (error) {
+    console.error(`API Error for ${url}:`, error.message);
+    
+    // If we have cached data, return it even if stale
+    if (cacheKey) {
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        console.warn(`Using stale cached data for ${cacheKey} due to error`);
+        return cached;
+      }
+    }
+    
+    // If rate limited and have retries left, wait and retry
+    if (error.response?.status === 429 && retries > 0) {
+      const retryAfter = error.response?.headers?.['retry-after'] || delayMs / 1000;
+      console.warn(`Rate limited. Retrying in ${retryAfter} seconds... (${retries} retries left)`);
+      await delay(retryAfter * 1000);
+      return fetchWithRetry(url, options, cacheKey, retries - 1, delayMs * 2);
+    }
+    
+    throw error; // Re-throw if no retries left or not a rate limit error
+  }
+}
+
 // Fetch market data and indicators for a coin (BTC/ETH)
 async function fetchCoinData(coinId) {
   const cacheKey = getMarketCacheKey(coinId);
   const historyCacheKey = getHistoryCacheKey(coinId);
+  const now = Date.now();
   
   try {
     // Check cache first (5-minute cache for market data, 1-hour for historical)
@@ -214,7 +256,6 @@ async function fetchCoinData(coinId) {
     const cachedHistory = cache.get(historyCacheKey);
     
     // If we have recent cached data, use it (5 minutes for market data, 1 hour for historical)
-    const now = Date.now();
     if (cachedMarket && (now - (cachedMarket.timestamp || 0) < 5 * 60 * 1000) &&
         cachedHistory && (now - (cachedHistory.timestamp || 0) < 60 * 60 * 1000)) {
       console.log(`Using cached data for ${coinId}`);
@@ -224,85 +265,67 @@ async function fetchCoinData(coinId) {
         fromCache: true
       };
     }
-
-    // Check rate limits before making API calls
-    if (dashboardData.rateLimit.remaining <= 2) { // Keep 2 requests in reserve
-      const waitTime = dashboardData.rateLimit.remainingTime * 1000 + 1000; // Add 1s buffer
-      console.warn(`Approaching rate limit. Waiting ${Math.ceil(waitTime/1000)}s...`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-
-    // Fetch market data
-    const marketRes = await coinGeckoApi.get('/coins/markets', {
-      params: {
-        vs_currency: 'usd',
-        ids: coinId,
-        price_change_percentage: '1h,24h,7d,14d,30d,200d,1y'
+    
+    // Fetch fresh market data
+    console.log(`Fetching fresh data for ${coinId}...`);
+    
+    // Get current market data
+    const marketRes = await fetchWithRetry(
+      `${config.coinGecko.baseUrl}/coins/markets`,
+      {
+        params: {
+          vs_currency: 'usd',
+          ids: coinId,
+          price_change_percentage: '1h,24h,7d,30d,1y',
+          precision: '2' // Reduce response size
+        },
+        timeout: 15000
       },
-      timeout: 10000
-    });
+      `${cacheKey}_market`
+    );
     
-    // Update rate limit info from response headers
-    updateRateLimitInfo(marketRes.headers);
-    
-    if (!marketRes.data || marketRes.data.length === 0) {
+    if (!marketRes?.[0]) {
       throw new Error(`No market data found for ${coinId}`);
     }
     
-    const market = marketRes.data[0];
+    const market = marketRes[0];
+    const now = Date.now();
     
-    // Fetch historical data (only if cache is stale)
-    let priceData, volumes, historicalFromCache = false;
-    
-    if (cachedHistory && (now - (cachedHistory.timestamp || 0) < 60 * 60 * 1000)) {
-      // Use cached historical data if less than 1 hour old
-      console.log(`Using cached historical data for ${coinId}`);
-      priceData = cachedHistory.data.priceData;
-      volumes = cachedHistory.data.volumes;
-      historicalFromCache = true;
-    } else {
-      // Fetch fresh historical data
-      const histRes = await coinGeckoApi.get(`/coins/${coinId}/market_chart`, {
+    // Fetch price chart data with retry logic and caching
+    const chartData = await fetchWithRetry(
+      `${config.coinGecko.baseUrl}/coins/${coinId}/market_chart`,
+      {
         params: {
           vs_currency: 'usd',
-          days: '90',
-          interval: 'daily'
-        },
-        timeout: 15000 // Slightly longer timeout for historical data
-      });
-      
-      updateRateLimitInfo(histRes.headers);
-      
-      if (!histRes.data || !histRes.data.prices) {
-        throw new Error(`No historical data found for ${coinId}`);
-      }
-      
-      priceData = histRes.data.prices.map(([timestamp, price]) => ({
-        timestamp,
-        price,
-        date: new Date(timestamp)
-      }));
-      
-      volumes = histRes.data.total_volumes?.map(([ts, vol]) => ({
-        timestamp: ts,
-        volume: vol
-      })) || [];
-      
-      // Cache the historical data
-      cache.set(historyCacheKey, {
-        data: {
-          priceData,
-          volumes,
-          indicators: cachedHistory?.data?.indicators // Keep existing indicators until we calculate new ones
-        },
-        timestamp: now
-      });
+          days: '1',
+          interval: 'hourly',
+          precision: '2' // Reduce response size
+        }
+      },
+      `${cacheKey}_chart`
+    );
+    
+    const prices = chartData?.prices || [];
+    const volumes = chartData?.total_volumes || [];
+    
+    if (!prices.length) {
+      throw new Error('No price data returned from API');
     }
     
-    // Process the data
-    const closes = priceData.map(p => p.price);
+    // Process the price and volume data
+    const priceData = prices.map(([timestamp, price]) => ({
+      timestamp,
+      price,
+      date: new Date(timestamp)
+    }));
     
-    // Calculate technical indicators
+    const volumeData = volumes.map(([ts, vol]) => ({
+      timestamp: ts,
+      volume: vol
+    }));
+    
+    // Calculate indicators
+    const closes = priceData.map(p => p.price);
     const sma50 = sma(closes, 50);
     const rsi14 = rsi(closes, 14);
     const macdObj = macd(closes, 12, 26, 9);
@@ -312,57 +335,56 @@ async function fetchCoinData(coinId) {
     const bbStdDev = 2;
     const bollingerBands = calculateBollingerBands(closes, bbPeriod, bbStdDev);
     
-    // Calculate support and resistance levels (skip if we have cached indicators)
-    let supportLevels = [];
-    let resistanceLevels = [];
+    // Calculate support and resistance levels
+    const priceDataForSwing = closes.map((price, i) => ({
+      price,
+      timestamp: priceData[i].timestamp
+    }));
     
-    if (!historicalFromCache || !cachedHistory?.data?.indicators) {
-      const priceDataForSwing = closes.map((price, i) => ({
-        price,
-        timestamp: priceData[i].timestamp
+    const volumeMap = new Map(
+      volumes.map((vol, i) => [priceData[i].timestamp, vol])
+    );
+    
+    const { swingHighs, swingLows } = findSwingHighsAndLows(priceDataForSwing, 3, 3);
+    
+    const enhanceWithVolume = (points) => 
+      points.map(p => ({
+        ...p,
+        volume: volumeMap.get(p.timestamp)?.volume || 0,
+        strength: 1
       }));
-      
-      const volumeMap = new Map(
-        volumes.map((vol, i) => [priceData[i].timestamp, vol])
-      );
-      
-      const { swingHighs, swingLows } = findSwingHighsAndLows(priceDataForSwing, 3, 3);
-      
-      const enhanceWithVolume = (points) => 
-        points.map(p => ({
-          ...p,
-          volume: volumeMap.get(p.timestamp)?.volume || 0,
-          strength: 1
-        }));
-      
-      const clusterOptions = {
-        threshold: 0.01,
-        volumeWeighted: true,
-        timeDecay: true
-      };
-      
-      supportLevels = groupPriceLevels(enhanceWithVolume(swingLows), clusterOptions);
-      resistanceLevels = groupPriceLevels(enhanceWithVolume(swingHighs), clusterOptions);
-    } else {
-      // Use cached support/resistance levels
-      supportLevels = cachedHistory.data.indicators.supportLevels || [];
-      resistanceLevels = cachedHistory.data.indicators.resistanceLevels || [];
-    }
     
-    // Get date range from price data
-    const timestamps = priceData.map(p => p.timestamp).filter(Boolean);
-    const dateRange = timestamps.length > 0 
-      ? {
-          start: new Date(Math.min(...timestamps)),
-          end: new Date(Math.max(...timestamps))
-        }
-      : null;
-
-    // Get the last values for all indicators
+    const clusterOptions = {
+      threshold: 0.01,
+      volumeWeighted: true,
+      timeDecay: true
+    };
+    
+    const supportLevels = groupPriceLevels(enhanceWithVolume(swingLows), clusterOptions);
+    const resistanceLevels = groupPriceLevels(enhanceWithVolume(swingHighs), clusterOptions);
+    
+    // Prepare indicators object
     const lastIndex = closes.length - 1;
     const bbLastIndex = bollingerBands.upper.length - 1;
     
-    // Prepare the result
+    const indicators = {
+      sma50: sma50[lastIndex],
+      rsi14: rsi14[lastIndex],
+      macd: {
+        macd: macdObj.MACD[lastIndex],
+        signal: macdObj.signal[lastIndex],
+        histogram: macdObj.histogram[lastIndex]
+      },
+      bollingerBands: {
+        upper: bollingerBands.upper[bbLastIndex],
+        middle: bollingerBands.middle[bbLastIndex],
+        lower: bollingerBands.lower[bbLastIndex]
+      },
+      supportLevels,
+      resistanceLevels
+    };
+    
+    // Cache the results
     const result = {
       price: market.current_price,
       change24h: market.price_change_percentage_24h,
@@ -371,80 +393,37 @@ async function fetchCoinData(coinId) {
       high24h: market.high_24h,
       low24h: market.low_24h,
       lastUpdated: market.last_updated,
-      indicators: {
-        sma50: sma50[lastIndex],
-        rsi14: rsi14[lastIndex],
-        macd: {
-          value: macdObj.macd[lastIndex],
-          signal: macdObj.signal[lastIndex],
-          histogram: macdObj.histogram[lastIndex]
-        },
-        bollingerBands: {
-          upper: bollingerBands.upper[bbLastIndex],
-          middle: bollingerBands.middle[bbLastIndex],
-          lower: bollingerBands.lower[bbLastIndex],
-          percentB: bollingerBands.percentB[bbLastIndex],
-          bandwidth: bollingerBands.bandwidth[bbLastIndex],
-          period: bbPeriod,
-          stdDev: bbStdDev
-        },
-        supportLevels: supportLevels.slice(0, 5),
-        resistanceLevels: resistanceLevels.slice(0, 5)
-      },
-      dateRange: dateRange ? {
-        start: dateRange.start.toISOString(),
-        end: dateRange.end.toISOString(),
-        startYear: dateRange.start.getFullYear(),
-        endYear: dateRange.end.getFullYear()
-      } : null,
+      indicators,
       fromCache: false
     };
     
-    // Cache the market data (shorter TTL)
-    cache.set(cacheKey, {
-      data: result,
+    // Update caches
+    cache.set(cacheKey, { data: result, timestamp: now });
+    cache.set(historyCacheKey, {
+      data: { priceData, volumes, indicators },
       timestamp: now
     });
     
-    // Update historical cache with latest indicators
-    if (cache.has(historyCacheKey)) {
-      const cached = cache.get(historyCacheKey);
-      cache.set(historyCacheKey, {
-        ...cached,
-        data: {
-          ...cached.data,
-          indicators: result.indicators,
-          supportLevels: result.indicators.supportLevels,
-          resistanceLevels: result.indicators.resistanceLevels
-        },
-        timestamp: now
-      });
-    }
-    
     return result;
     
-  } catch (err) {
-    logError(`Error fetching data for ${coinId}:`, err);
+  } catch (error) {
+    console.error(`Error in fetchCoinData for ${coinId}:`, error);
     
-    // Return cached data if available
+    // If we have cached data, return it even if stale
     const cachedMarket = cache.get(cacheKey);
     const cachedHistory = cache.get(historyCacheKey);
     
     if (cachedMarket && cachedHistory) {
-      console.log(`Using cached data after error for ${coinId}`);
+      console.warn(`Using cached data for ${coinId} due to error`);
       return {
         ...cachedMarket.data,
         indicators: cachedHistory.data.indicators,
         fromCache: true,
-        error: {
-          message: 'Using cached data due to API error',
-          originalError: err.message
-        }
+        error: `Using cached data due to error: ${error.message}`
       };
     }
     
-    // If no cache is available, re-throw the error
-    throw err;
+    throw error; // Re-throw if no cached data available
   }
 }
 
@@ -475,7 +454,7 @@ async function fetchYahooData(symbol) {
     console.log(`Fetching fresh data for ${symbol} from Yahoo Finance...`);
     
     const res = await axios.get(
-      'https://query1.finance.yahoo.com/v8/finance/chart/^GSPC',
+      `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}`,
       {
         params: {
           interval: '1d',
@@ -581,15 +560,15 @@ const FEAR_GREED_CACHE_KEY = 'fear_greed_index';
 
 // Fetch trending coins with caching and error handling
 async function fetchTrending() {
+  const cacheKey = TRENDING_CACHE_KEY;
   const now = Date.now();
-  const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
   
   try {
-    // Check cache first
-    const cached = cache.get(TRENDING_CACHE_KEY);
-    if (cached && (now - (cached.timestamp || 0) < CACHE_TTL)) {
+    // Check cache first (5 minute cache)
+    const cached = cache.get(cacheKey);
+    if (cached && (now - (cached.timestamp || 0) < 5 * 60 * 1000)) {
       console.log('Using cached trending coins data');
-      return { ...cached.data, fromCache: true };
+      return Array.isArray(cached.data) ? cached.data : [];
     }
     
     // Check rate limits
@@ -609,50 +588,41 @@ async function fetchTrending() {
       throw new Error('Invalid response from CoinGecko API');
     }
     
-    const trendingData = {
-      coins: res.data.coins.map(coin => ({
-        id: coin.item.id,
-        name: coin.item.name,
-        symbol: coin.item.symbol.toUpperCase(),
-        price_btc: coin.item.price_btc,
-        market_cap_rank: coin.item.market_cap_rank,
-        thumb: coin.item.thumb,
-        large: coin.item.large,
-        price_change_percentage_24h: coin.item.data?.price_change_percentage_24h?.usd
-      })),
-      lastUpdated: now,
-      fromCache: false
-    };
+    const trendingCoins = res.data.coins.map(coin => ({
+      id: coin.item.id,
+      name: coin.item.name,
+      symbol: coin.item.symbol.toUpperCase(),
+      price_btc: coin.item.price_btc,
+      market_cap_rank: coin.item.market_cap_rank,
+      thumb: coin.item.thumb,
+      large: coin.item.large,
+      price_change_percentage_24h: coin.item.data?.price_change_percentage_24h?.usd
+    }));
+    
+    // Ensure we have a valid array before caching
+    const result = Array.isArray(trendingCoins) ? trendingCoins : [];
     
     // Cache the result
-    cache.set(TRENDING_CACHE_KEY, { data: trendingData, timestamp: now });
+    cache.set(cacheKey, { data: result, timestamp: now });
     
-    return trendingData;
+    return result;
     
-  } catch (err) {
-    logError('Failed to fetch trending coins', err);
+  } catch (error) {
+    console.error('Error fetching trending coins:', error);
     
-    // Return cached data if available
-    const cached = cache.get(TRENDING_CACHE_KEY);
-    if (cached) {
-      console.log('Using cached trending coins data after error');
+    // Return cached data if available, even if stale
+    const cached = cache.get(cacheKey);
+    if (cached?.data) {
+      console.warn('Using stale cached trending data due to error');
       return { 
-        ...cached.data, 
-        fromCache: true,
-        error: {
-          message: 'Using cached data due to API error',
-          originalError: err.message
-        }
+        coins: Array.isArray(cached.data) ? cached.data : [], 
+        fromCache: true, 
+        error: `Using cached data due to API error: ${error.message}` 
       };
     }
     
-    // If no cache is available, return empty result with error
-    return {
-      coins: [],
-      error: `Failed to fetch trending coins: ${err.message}`,
-      lastUpdated: Date.now(),
-      fromCache: false
-    };
+    // Return empty array if no cached data available
+    return { coins: [], fromCache: false, error: `Failed to fetch trending coins: ${error.message}` };
   }
 }
 
@@ -895,7 +865,7 @@ async function updateDashboard() {
 
 // Initial update and interval polling
 updateDashboard();
-setInterval(updateDashboard, UPDATE_INTERVAL_MS);
+setInterval(updateDashboard, config.updateIntervalMs);
 
 // API endpoint for dashboard data
 app.get('/api/dashboard', (req, res) => {
