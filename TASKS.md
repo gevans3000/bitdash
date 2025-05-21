@@ -147,6 +147,12 @@
   - [ ] Automated deployments
   - [ ] Test coverage reporting
 
+### 11. Server Refactor (2025-05-20)
+- [x] Split large `index.js` into modules for API, caching, dashboard, and routes
+- [x] Create centralized entry point loading these modules
+- [ ] Write unit tests for API helpers
+- [ ] Verify server startup and route responses
+
 ## 🔄 Discovered During Work
 
 ### Technical Debt
