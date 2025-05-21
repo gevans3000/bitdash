@@ -153,6 +153,45 @@
 - [ ] Write unit tests for API helpers
 - [ ] Verify server startup and route responses
 
+## 🚀 API and Data Layer Improvements
+
+### 1. Replace Unofficial Yahoo Finance API (Planned) - *Target: 2024-06-10*
+- [ ] Research and select a reliable stock data API (e.g., Alpha Vantage, IEX Cloud)
+- [ ] Implement new API client for stock data
+- [ ] Update `fetchYahooData`, `fetchSPYData`, and `fetchSPXData` functions
+- [ ] Modify caching logic for the new API
+- [ ] Update response parsing for current price, change, volume, etc.
+- [ ] Add error handling and retry logic
+- [ ] Update API documentation
+
+### 2. Enhance Error/Status Reporting (Planned) - *Target: 2024-06-15*
+- [ ] Add status field to `dashboardData` object
+- [ ] Define status types: "fresh", "cached_error", "error", "unavailable"
+- [ ] Update all data fetching functions to set appropriate status
+- [ ] Modify `/api/dashboard` endpoint to expose status indicators
+- [ ] Update frontend to handle and display status information
+
+### 3. Refactor Data Fetching (Planned) - *Target: 2024-06-20*
+- [ ] Create generic API helper functions in `utils/api-helpers.js`
+- [ ] Refactor `fetchCoinData` to use new helpers
+- [ ] Refactor stock data fetching to use new helpers
+- [ ] Refactor `fetchTrending` and `fetchFearGreed`
+- [ ] Consolidate error handling and caching logic
+- [ ] Add unit tests for new helper functions
+
+### 4. Improve Error Handling in `updateDashboard` (Planned) - *Target: 2024-06-25*
+- [ ] Ensure all promises in `Promise.all` handle errors
+- [ ] Standardize error response format
+- [ ] Add error boundary handling
+- [ ] Implement proper error logging
+- [ ] Add retry logic for failed requests
+
+### 5. Unit Tests for Indicator Calculations (Planned) - *Target: 2024-06-30*
+- [ ] Create test cases for all indicator functions
+- [ ] Add test data sets with known results
+- [ ] Test edge cases and error conditions
+- [ ] Implement continuous integration for tests
+
 ## 🔄 Discovered During Work
 
 ### Technical Debt
